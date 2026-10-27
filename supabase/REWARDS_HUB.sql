@@ -1,0 +1,1 @@
+create table if not exists offers (id uuid primary key default gen_random_uuid(), nome text, payout_total numeric default 8.5, reward_user numeric default 1.0, profit_owner numeric generated always as (payout_total - reward_user) stored, link_afiliado text, ativa boolean default true);
