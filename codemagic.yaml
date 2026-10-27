@@ -7,8 +7,6 @@ workflows:
     environment:
       flutter: 3.19.6
       java: 17
-      android_signing:
-        - keystore_reference
     scripts:
       - name: Set up local.properties
         script: |
@@ -18,7 +16,7 @@ workflows:
           echo "flutter.versionName=1.0.0" >> $CM_BUILD_DIR/android/local.properties
       - name: Get Flutter packages
         script: flutter pub get
-      - name: Build APK
+      - name: Build APK (debug, sem assinatura)
         script: flutter build apk --release --no-tree-shake-icons
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
