@@ -1,4 +1,4 @@
-   namespace "com.pixrewards.app"
+
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) { localPropertiesFile.withReader('UTF-8') { localProperties.load(it) } }
@@ -14,8 +14,8 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
-android {
-    compileSdkVersion 33
+android {   namespace "com.pixrewards.app"
+    compileSdkVersion 34
     ndkVersion flutter.ndkVersion
 
     compileOptions {
