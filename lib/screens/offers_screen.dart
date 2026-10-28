@@ -49,24 +49,49 @@ class _OffersScreenState extends State<OffersScreen> {
     setState(() => loading = false);
   }
 
+  Future<User?> entrar(SupabaseClient supa, List<String> erros) async {
+    var user = supa.auth.currentUser;
+    if (user != null) return user;
+
+    // 1) tenta entrar como usuario anonimo (sem e-mail)
+    try {
+      await (supa.auth as dynamic).signInAnonymously();
+    } catch (e) {
+      erros.add('anonimo: $e');
+    }
+    user = supa.auth.currentUser;
+    if (user != null) return user;
+
+    // 2) se nao der, tenta cadastro com e-mail automatico
+    try {
+      await supa.auth.signUp(
+        email: 'user${DateTime.now().millisecondsSinceEpoch}@pixrewards.com',
+        password: 'pixrewards123',
+      );
+    } catch (e) {
+      erros.add('cadastro: $e');
+    }
+    return supa.auth.currentUser;
+  }
+
   Future<void> pegar(oferta) async {
     final supa = Supabase.instance.client;
-    var user = supa.auth.currentUser;
+    final erros = <String>[];
+    final user = await entrar(supa, erros);
     if (user == null) {
-      try {
-        await supa.auth.signUp(
-          email: 'user${DateTime.now().millisecondsSinceEpoch}@pixrewards.com',
-          password: 'pixrewards123',
-        );
-      } catch (_) {}
-      user = supa.auth.currentUser;
-      if (user == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Nao foi possivel entrar. Tente de novo.')),
-        );
-        return;
-      }
+      if (!mounted) return;
+      final detalhe = erros.join(' | ');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: Duration(seconds: 12),
+          content: Text(
+            detalhe.isEmpty
+                ? 'Nao foi possivel entrar. Tente de novo.'
+                : 'Erro ao entrar: $detalhe',
+          ),
+        ),
+      );
+      return;
     }
     try {
       await supa.from('installs').insert({
