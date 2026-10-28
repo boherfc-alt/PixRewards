@@ -70,3 +70,4 @@ class _OffersScreenState extends State<OffersScreen> {
             ),
     );
   }
+}
