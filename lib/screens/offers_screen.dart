@@ -53,23 +53,10 @@ class _OffersScreenState extends State<OffersScreen> {
     var user = supa.auth.currentUser;
     if (user != null) return user;
 
-    // 1) tenta entrar como usuario anonimo (sem e-mail)
     try {
       await (supa.auth as dynamic).signInAnonymously();
     } catch (e) {
       erros.add('anonimo: $e');
-    }
-    user = supa.auth.currentUser;
-    if (user != null) return user;
-
-    // 2) se nao der, tenta cadastro com e-mail automatico
-    try {
-      await supa.auth.signUp(
-        email: 'user${DateTime.now().millisecondsSinceEpoch}@pixrewards.com',
-        password: 'pixrewards123',
-      );
-    } catch (e) {
-      erros.add('cadastro: $e');
     }
     return supa.auth.currentUser;
   }
