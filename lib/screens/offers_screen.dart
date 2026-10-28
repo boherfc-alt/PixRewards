@@ -30,7 +30,7 @@ class _OffersScreenState extends State<OffersScreen> {
           .from('offers')
           .select('id,nome,descricao,reward_user,link_afiliado')
           .eq('ativa', true)
-          .order('payout_total', ascending: false);
+          .order('reward_user', ascending: false);
       if (!mounted) return;
       setState(() => offers = res);
     } catch (e) {
