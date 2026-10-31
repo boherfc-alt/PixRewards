@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'offers_screen.dart';
+
+const Color _gold = Color(0xFFD4AF37);
+const Color _bg = Color(0xFF0B0B0B);
+const Color _card = Color(0xFF161616);
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -10,8 +13,10 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  List items = [];
+  List<Map<String, dynamic>> itens = [];
   bool loading = true;
+
+  SupabaseClient get _supa => Supabase.instance.client;
 
   @override
   void initState() {
@@ -20,118 +25,197 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> load() async {
-    final client = Supabase.instance.client;
-    final uid = client.auth.currentUser?.id;
+    final lista = <Map<String, dynamic>>[];
+    final uid = _supa.auth.currentUser?.id;
     if (uid != null) {
+      // Ofertas pegas
       try {
-        final res = await client
+        final installs = await _supa
             .from('installs')
-            .select('id,status,offers(nome,reward_user)')
+            .select('id,offer_id,status,created_at')
             .eq('user_id', uid);
-        items = res;
-      } catch (e) {
-        try {
-          final res = await client
-              .from('installs')
-              .select('id,status')
-              .eq('user_id', uid);
-          items = res;
-        } catch (_) {}
-      }
+        final offers = await _supa.from('offers').select('id,nome');
+        final nomes = <String, String>{
+          for (final o in offers) o['id'].toString(): o['nome'].toString(),
+        };
+        for (final i in installs) {
+          lista.add({
+            'titulo': nomes[i['offer_id'].toString()] ?? 'Oferta',
+            'status': i['status'].toString(),
+            'data': DateTime.tryParse(i['created_at'].toString()),
+            'saque': false,
+          });
+        }
+      } catch (_) {}
+      // Pedidos de saque
+      try {
+        final saques = await _supa
+            .from('withdrawals')
+            .select('id,valor,status,created_at')
+            .eq('user_id', uid);
+        for (final s in saques) {
+          final v = (num.tryParse(s['valor'].toString()) ?? 0).toDouble();
+          lista.add({
+            'titulo':
+                'Saque Pix - R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}',
+            'status': s['status'].toString(),
+            'data': DateTime.tryParse(s['created_at'].toString()),
+            'saque': true,
+          });
+        }
+      } catch (_) {}
     }
+    lista.sort((a, b) {
+      final da = a['data'] as DateTime?;
+      final db = b['data'] as DateTime?;
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return db.compareTo(da);
+    });
     if (!mounted) return;
-    setState(() => loading = false);
+    setState(() {
+      itens = lista;
+      loading = false;
+    });
   }
 
-  String nomeDe(dynamic it) {
-    final of = it['offers'];
-    if (of is Map && of['nome'] != null) return of['nome'].toString();
-    return 'Oferta';
+  String _rotulo(String status) {
+    switch (status) {
+      case 'clicou':
+        return 'CLICOU';
+      case 'instalou':
+        return 'INSTALOU';
+      case 'verificado':
+        return 'VERIFICADO';
+      case 'creditado':
+      case 'pago':
+        return 'PAGO';
+      case 'rejeitado':
+        return 'REJEITADO';
+      case 'pendente':
+        return 'PENDENTE';
+      default:
+        return status.toUpperCase();
+    }
   }
 
-  String statusDe(dynamic it) {
-    final s = (it['status'] ?? '').toString();
-    if (s == 'clicou') return 'CLICOU';
-    return s.toUpperCase();
+  Color _cor(String rotulo) {
+    if (rotulo == 'PAGO') return Color(0xFF00E676);
+    if (rotulo == 'REJEITADO') return Colors.redAccent;
+    return _gold;
+  }
+
+  String _data(DateTime? d) {
+    if (d == null) return '';
+    final l = d.toLocal();
+    String dois(int n) => n.toString().padLeft(2, '0');
+    return '${dois(l.day)}/${dois(l.month)} ${dois(l.hour)}:${dois(l.minute)}';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBlack,
+      backgroundColor: _bg,
       appBar: AppBar(
         centerTitle: true,
         backgroundColor: Colors.black,
         elevation: 0,
-        shape: Border(bottom: BorderSide(color: kGold, width: 1.5)),
+        shape: Border(bottom: BorderSide(color: _gold, width: 1.5)),
         title: Text(
-          'HISTÓRICO',
+          'HISTORICO',
           style: TextStyle(
-            color: kGold,
+            color: _gold,
             fontWeight: FontWeight.w800,
             letterSpacing: 3,
           ),
         ),
       ),
       body: loading
-          ? Center(child: CircularProgressIndicator(color: kGold))
-          : items.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'Nenhuma oferta ainda.\nToque em PEGAR na aba Ganhar Pix.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
+          ? Center(child: CircularProgressIndicator(color: _gold))
+          : RefreshIndicator(
+              color: _gold,
+              onRefresh: load,
+              child: itens.isEmpty
+                  ? ListView(
+                      physics: AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(height: 120),
+                        Center(
+                          child: Text('Historico vazio',
+                              style: TextStyle(color: Colors.grey)),
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      physics: AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.all(12),
+                      itemCount: itens.length,
+                      itemBuilder: (_, i) {
+                        final it = itens[i];
+                        final rotulo = _rotulo(it['status'].toString());
+                        final cor = _cor(rotulo);
+                        return Container(
+                          margin: EdgeInsets.only(bottom: 10),
+                          padding:
+                              EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: _card,
+                            borderRadius: BorderRadius.circular(14),
+                            border:
+                                Border.all(color: Color(0x55D4AF37), width: 1),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                it['saque'] == true
+                                    ? Icons.pix
+                                    : Icons.phone_android,
+                                color: _gold,
+                              ),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      it['titulo'].toString(),
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(height: 3),
+                                    Text(
+                                      _data(it['data'] as DateTime?),
+                                      style: TextStyle(
+                                          color: Colors.grey, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: cor, width: 1),
+                                ),
+                                child: Text(
+                                  rotulo,
+                                  style: TextStyle(
+                                    color: cor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
-                  ),
-                )
-              : ListView.builder(
-                  padding: EdgeInsets.all(12),
-                  itemCount: items.length,
-                  itemBuilder: (_, i) {
-                    final it = items[i];
-                    return Container(
-                      margin: EdgeInsets.only(bottom: 12),
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: kCard,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Color(0x55D4AF37), width: 1),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              nomeDe(it),
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Color(0x26D4AF37),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: kGold, width: 1),
-                            ),
-                            child: Text(
-                              statusDe(it),
-                              style: TextStyle(
-                                color: kGold,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+            ),
     );
   }
 }
